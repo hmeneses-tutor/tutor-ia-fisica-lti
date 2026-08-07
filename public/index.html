@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tutor IA de Física</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="styles.css" />
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [
+        ['$', '$'],
+        ['\\(', '\\)']
+      ],
+      displayMath: [
+        ['$$', '$$'],
+        ['\\[', '\\]']
+      ]
+    }
+  };
+</script>
+
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+</head>
+<body>
+  <div class="app-root">
+
+    <!-- Barra superior -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Tutor IA de Física</span>
+      </div>
+      <div class="topbar-right">
+        <button id="toggleThemeBtn" class="btn btn-secondary">Modo oscuro</button>
+        <button id="evaluateSessionBtn" class="btn btn-secondary">Calificar sesión</button>
+        <button id="exportPdfBtn" class="btn btn-secondary">Exportar PDF</button>
+        <button id="restoreSessionBtn" class="btn btn-secondary hidden">Recuperar sesión</button>
+        <button id="discardSavedSessionBtn" class="btn btn-secondary hidden">Descartar borrador</button>
+        <button id="saveSessionBtn" class="btn btn-primary">Guardar sesión</button>
+      </div>
+    </header>
+
+    <!-- Layout principal: sidebar izquierda + chat derecha -->
+    <main class="main-layout">
+      <!-- Sidebar izquierda -->
+      <aside class="sidebar">
+<div class="sidebar-section">
+  <h3>Identidad del estudiante</h3>
+  <input
+    id="studentName"
+    class="input-text"
+    type="text"
+    placeholder="Escribe tu nombre"
+    autocomplete="name"
+  />
+  <p id="ltiIdentityInfo" class="sidebar-hint lti-identity-info hidden"></p>
+  <label for="teamMembers" class="field-label">Otros integrantes del equipo <span class="optional-label">(opcional)</span></label>
+  <input
+    id="teamMembers"
+    class="input-text"
+    type="text"
+    placeholder="Ej.: Ana Pérez - Juan Silva"
+  />
+  <p class="sidebar-hint">
+    Si ingresas desde Moodle, tu identidad se completa automáticamente. En trabajos en equipo, agrega aquí a los demás integrantes.
+  </p>
+</div>
+
+        <h2>Enunciado del ejercicio</h2>
+        <textarea
+          id="exercise"
+          class="textarea-enunciado"
+          placeholder="Escribe o pega aquí el enunciado. También puedes usar solo una captura que contenga texto + figura."
+        ></textarea>
+
+        <div class="exercise-image-section">
+          <h3>Imagen o captura del ejercicio <span class="optional-label">(opcional)</span></h3>
+          <div
+            id="exerciseImageDropzone"
+            class="image-dropzone"
+            tabindex="0"
+            role="button"
+            aria-label="Pegar, arrastrar o seleccionar una imagen del ejercicio"
+          >
+            <div id="exerciseImageEmpty" class="image-dropzone-empty">
+              <strong>Pega una captura con Ctrl+V</strong><br />
+              o arrastra una imagen aquí
+              <span class="image-dropzone-subtext">También puedes seleccionarla desde tu equipo.</span>
+            </div>
+            <img id="exerciseImagePreview" class="exercise-image-preview hidden" alt="Vista previa del ejercicio" />
+          </div>
+          <input id="exerciseImageInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+          <div class="image-actions">
+            <button id="selectExerciseImageBtn" type="button" class="btn btn-secondary">Seleccionar imagen</button>
+            <button id="removeExerciseImageBtn" type="button" class="btn btn-secondary hidden">Quitar imagen</button>
+          </div>
+          <p class="sidebar-hint image-hint">
+            Puedes iniciar el tutor con <strong>solo texto</strong>, <strong>texto + imagen</strong> o <strong>solo una captura</strong> que contenga todo el ejercicio.
+          </p>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Modo del tutor</h3>
+          <div class="mode-buttons">
+            <button class="btn-mode active" data-mode="guiada">Guía paso a paso</button>
+            <button class="btn-mode" data-mode="corta">Explicación corta</button>
+            <button class="btn-mode" data-mode="diagnostico">Diagnóstico inicial</button>
+          </div>
+          <p class="sidebar-hint">
+            • <strong>Guía:</strong> tutor paso a paso.<br />
+            • <strong>Corta:</strong> responde a una duda concreta.<br />
+            • <strong>Diagnóstico:</strong> te hace preguntas para evaluar tu nivel.
+          </p>
+        </div>
+
+        <button id="startTutorBtn" class="btn btn-start">Iniciar tutor</button>
+
+        <p id="autosaveNotice" class="sidebar-hint">Guardado automático activo</p>
+
+        <p class="sidebar-small">
+          El tutor guarda automáticamente un borrador local para poder recuperar una sesión interrumpida. Si ingresas desde Moodle mediante LTI 1.3, la sesión también queda asociada a tu identidad de Moodle y puede recuperarse desde otro navegador mientras el almacenamiento del servidor sea persistente. “Exportar PDF” abre una vista para
+          imprimir/guardar como PDF (por ejemplo, para subir a Moodle).
+        </p>
+      </aside>
+
+      <!-- Columna derecha: conversación y entrada -->
+      <section class="chat-column">
+        <!-- Ventana de conversación -->
+        <div class="chat-window-wrapper">
+          <div id="chat" class="chat-window">
+            <!-- mensajes se agregan por JS -->
+          </div>
+        </div>
+
+        <!-- Barra de símbolos matemáticos -->
+        <div class="math-toolbar">
+  <!-- Fila principal: lo esencial -->
+  <div class="math-row">
+    <!-- Formato -->
+    <button type="button" class="math-symbol-btn" data-action="super">Superíndice</button>
+    <button type="button" class="math-symbol-btn" data-action="sub">Subíndice</button>
+
+    <!-- Operadores básicos -->
+    <button type="button" class="math-symbol-btn" data-symbol="+">+</button>
+    <button type="button" class="math-symbol-btn" data-symbol="−">−</button>
+    <button type="button" class="math-symbol-btn" data-symbol="×">×</button>
+    <button type="button" class="math-symbol-btn" data-symbol="÷">÷</button>
+
+    <!-- Igualdades / desigualdades -->
+    <button type="button" class="math-symbol-btn" data-symbol="=">=</button>
+    <button type="button" class="math-symbol-btn" data-symbol="≠">≠</button>
+    <button type="button" class="math-symbol-btn" data-symbol="≈">≈</button>
+    <button type="button" class="math-symbol-btn" data-symbol="≤">≤</button>
+    <button type="button" class="math-symbol-btn" data-symbol="≥">≥</button>
+
+    <!-- Botón para desplegar -->
+    <button type="button" id="mathToggleBtn" class="math-toggle-btn">
+      Más símbolos ▾
+    </button>
+  </div>
+
+  <!-- Panel extra (se oculta / muestra) -->
+  <div class="math-extra hidden" id="mathExtraPanel">
+    <!-- Fila 2: versores y letras griegas más usadas -->
+    <div class="math-row">
+      <!-- Versores -->
+      <button type="button" class="math-symbol-btn" data-symbol="î">î</button>
+      <button type="button" class="math-symbol-btn" data-symbol="ĵ">ĵ</button>
+      <button type="button" class="math-symbol-btn" data-symbol="k̂">k̂</button>
+
+      <!-- Letras griegas frecuentes en física -->
+      <button type="button" class="math-symbol-btn" data-symbol="α">α</button>
+      <button type="button" class="math-symbol-btn" data-symbol="β">β</button>
+      <button type="button" class="math-symbol-btn" data-symbol="Δ">Δ</button>
+      <button type="button" class="math-symbol-btn" data-symbol="θ">θ</button>
+      <button type="button" class="math-symbol-btn" data-symbol="μ">μ</button>
+      <button type="button" class="math-symbol-btn" data-symbol="π">π</button>
+      <button type="button" class="math-symbol-btn" data-symbol="Ω">Ω</button>
+    </div>
+
+    <!-- Fila 3: otros símbolos útiles -->
+    <div class="math-row">
+      <button type="button" class="math-symbol-btn" data-symbol="√">√</button>
+      <button type="button" class="math-symbol-btn" data-symbol="→">→</button>
+      <button type="button" class="math-symbol-btn" data-symbol="∞">∞</button>
+      <button type="button" class="math-symbol-btn" data-symbol="∑">∑</button>
+      <button type="button" class="math-symbol-btn" data-symbol="∫">∫</button>
+      <button type="button" class="math-symbol-btn" data-symbol="|">|</button>
+    </div>
+  </div>
+</div>
+
+
+        <!-- Entrada de mensaje -->
+        <div class="input-row">
+          <textarea
+            id="studentMessage"
+            class="input-text"
+            rows="2"
+            placeholder="Escribe tu respuesta, duda o el siguiente paso..."
+          ></textarea>
+          <button id="sendBtn" class="btn btn-send">Enviar</button>
+        </div>
+
+        <p id="status" class="status"></p>
+
+        <!-- Evaluación -->
+        <div class="evaluation-card">
+          <h3>Evaluación de la sesión</h3>
+          <div id="evaluationOutput" class="evaluation-output">
+  (Aquí aparecerá la evaluación de la sesión)
+</div>
+        </div>
+
+<div id="sessionEndCard" class="session-end-card hidden">
+  <h3>Sesión finalizada</h3>
+  <p id="sessionEndSummary" class="session-end-summary">
+    La sesión fue evaluada correctamente.
+  </p>
+
+  <div class="session-end-actions">
+    <button id="newSessionBtn" class="btn btn-primary">Nuevo ejercicio</button>
+    <button id="finalExportPdfBtn" class="btn btn-secondary">Exportar PDF</button>
+  </div>
+</div>
+      </section>
+    </main>
+
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "tutoria-fisica-azure-openai",
+  "version": "1.0.0",
+  "description": "Tutor IA de Física usando Azure OpenAI",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0"
+  }
+}
