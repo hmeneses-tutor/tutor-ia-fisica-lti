@@ -1002,6 +1002,7 @@ const safeStudentName = studentName.replace(/[\\/:*?"<>|]/g, '-');
   const notaUTEC = Number.isFinite(Number(notaGlobal)) ? convertirPorcentajeUTEC(Number(notaGlobal)) : null;
   const conceptoUTEC = notaUTEC !== null ? getConceptoUTEC(notaUTEC) : '';
   const calificacionHeader = notaUTEC !== null ? `${notaGlobal}/100 · UTEC ${notaUTEC.toFixed(2)} (${conceptoUTEC})` : 'Pendiente';
+  const courseName = ltiIdentity?.contextTitle?.trim() || '';
 
   const modeMap = {
     guiada: 'Guía paso a paso',
@@ -1136,6 +1137,7 @@ const safeStudentName = studentName.replace(/[\\/:*?"<>|]/g, '-');
         <div class="header-grid">
           <p><span class="label">Estudiante:</span> ${studentName}</p>
           <p><span class="label">Fecha:</span> ${date}</p>
+          ${courseName ? `<p><span class="label">Curso:</span> ${courseName}</p>` : ''}
           <p><span class="label">Calificación:</span> ${calificacionHeader}</p>
           <p><span class="label">Hora de comienzo:</span> ${startTime}</p>
           <p><span class="label">Hora de finalización:</span> ${endTime}</p>
