@@ -34,11 +34,17 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ==========================
 // La integración es opcional: el tutor sigue funcionando de forma independiente
 // si estas variables no están configuradas.
-const LTI_CLIENT_ID = process.env.LTI_CLIENT_ID || '';
+const LTI_CLIENT_IDS = (process.env.LTI_CLIENT_IDS || process.env.LTI_CLIENT_ID || '')
+  .split(',')
+  .map(id => id.trim())
+  .filter(Boolean);
 const LTI_ISSUER = process.env.LTI_ISSUER || '';
 const LTI_AUTH_LOGIN_URL = process.env.LTI_AUTH_LOGIN_URL || '';
 const LTI_PLATFORM_JWKS_URL = process.env.LTI_PLATFORM_JWKS_URL || '';
-const LTI_DEPLOYMENT_ID = process.env.LTI_DEPLOYMENT_ID || '';
+const LTI_DEPLOYMENT_IDS = (process.env.LTI_DEPLOYMENT_IDS || process.env.LTI_DEPLOYMENT_ID || '')
+  .split(',')
+  .map(id => id.trim())
+  .filter(Boolean);
 const LTI_SESSION_SECRET = process.env.LTI_SESSION_SECRET || '';
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
 const LTI_COOKIE_NAME = 'tutoria_lti_session';
@@ -64,7 +70,7 @@ function loadToolSigningKey() {
 const LTI_TOOL_KEY = loadToolSigningKey();
 
 function ltiIsConfigured() {
-  return Boolean(LTI_CLIENT_ID && LTI_ISSUER && LTI_AUTH_LOGIN_URL && LTI_PLATFORM_JWKS_URL && LTI_SESSION_SECRET);
+  return Boolean(LTI_CLIENT_IDS.length && LTI_ISSUER && LTI_AUTH_LOGIN_URL && LTI_PLATFORM_JWKS_URL && LTI_SESSION_SECRET);
 }
 
 function getPublicBaseUrl(req) {
@@ -105,7 +111,7 @@ async function getPlatformJwks() {
   return json.keys;
 }
 
-async function verifyLtiIdToken(idToken, expectedNonce) {
+async function verifyLtiIdToken(idToken, expectedNonce, expectedClientId) {
   const parsed = parseJwt(idToken);
   if (parsed.header.alg !== 'RS256') throw new Error(`Algoritmo LTI no admitido: ${parsed.header.alg}`);
   if (!parsed.header.kid) throw new Error('El token LTI no contiene kid');
@@ -117,7 +123,7 @@ async function verifyLtiIdToken(idToken, expectedNonce) {
     const refreshed = await getPlatformJwks();
     const retryJwk = refreshed.find(k => k.kid === parsed.header.kid);
     if (!retryJwk) throw new Error('No se encontró la clave pública usada por Moodle');
-    return verifyLtiIdToken(idToken, expectedNonce);
+    return verifyLtiIdToken(idToken, expectedNonce, expectedClientId);
   }
 
   const keyObject = crypto.createPublicKey({ key: jwk, format: 'jwk' });
@@ -128,20 +134,22 @@ async function verifyLtiIdToken(idToken, expectedNonce) {
   const now = Math.floor(Date.now() / 1000);
   if (p.iss !== LTI_ISSUER) throw new Error('Issuer LTI inesperado');
   const aud = Array.isArray(p.aud) ? p.aud : [p.aud];
-  if (!aud.includes(LTI_CLIENT_ID)) throw new Error('El token LTI no está dirigido a este tutor');
-  if (aud.length > 1 && p.azp && p.azp !== LTI_CLIENT_ID) throw new Error('azp LTI inválido');
+  const clientId = expectedClientId || LTI_CLIENT_IDS.find(id => aud.includes(id));
+  if (!clientId || !LTI_CLIENT_IDS.includes(clientId) || !aud.includes(clientId)) {
+    throw new Error('El token LTI no está dirigido a este tutor');
+  }
+  if (aud.length > 1 && p.azp && p.azp !== clientId) throw new Error('azp LTI inválido');
   if (!p.exp || p.exp < now - 60) throw new Error('Token LTI vencido');
   if (p.iat && p.iat > now + 60) throw new Error('Fecha de emisión LTI inválida');
   if (!p.nonce || p.nonce !== expectedNonce) throw new Error('Nonce LTI inválido');
   if (p['https://purl.imsglobal.org/spec/lti/claim/version'] !== '1.3.0') throw new Error('Versión LTI no válida');
 
- const deployment = p['https://purl.imsglobal.org/spec/lti/claim/deployment_id'];
+  const deployment = p['https://purl.imsglobal.org/spec/lti/claim/deployment_id'];
+  if (LTI_DEPLOYMENT_IDS.length && !LTI_DEPLOYMENT_IDS.includes(String(deployment || ''))) {
+    throw new Error('Deployment ID LTI inesperado');
+  }
 
-if (LTI_DEPLOYMENT_ID && deployment !== LTI_DEPLOYMENT_ID) {
-  throw new Error('Deployment ID LTI inesperado');
-}
-
-return p;
+  return p;
 }
 
 function signLtiSession(payload) {
@@ -209,11 +217,16 @@ app.all('/lti/login', (req, res) => {
     const input = { ...req.query, ...req.body };
     if (!input.login_hint) return res.status(400).send('Falta login_hint en el inicio LTI.');
     if (input.iss && input.iss !== LTI_ISSUER) return res.status(400).send('Issuer LTI no reconocido.');
-    if (input.client_id && input.client_id !== LTI_CLIENT_ID) return res.status(400).send('Client ID LTI no reconocido.');
+
+    const requestedClientId = String(input.client_id || '').trim();
+    const clientId = requestedClientId || (LTI_CLIENT_IDS.length === 1 ? LTI_CLIENT_IDS[0] : '');
+    if (!clientId || !LTI_CLIENT_IDS.includes(clientId)) {
+      return res.status(400).send('Client ID LTI no reconocido.');
+    }
 
     const state = crypto.randomBytes(24).toString('base64url');
     const nonce = crypto.randomBytes(24).toString('base64url');
-    ltiStates.set(state, { nonce, createdAt: Date.now() });
+    ltiStates.set(state, { nonce, clientId, createdAt: Date.now() });
 
     const redirectUri = `${getPublicBaseUrl(req)}/lti/launch`;
     const params = new URLSearchParams({
@@ -221,7 +234,7 @@ app.all('/lti/login', (req, res) => {
       response_type: 'id_token',
       response_mode: 'form_post',
       prompt: 'none',
-      client_id: LTI_CLIENT_ID,
+      client_id: clientId,
       redirect_uri: redirectUri,
       login_hint: input.login_hint,
       state,
@@ -241,7 +254,7 @@ app.post('/lti/launch', async (req, res) => {
     const stateInfo = ltiStates.get(String(req.body?.state || ''));
     if (!stateInfo) return res.status(400).send('Estado LTI inválido o vencido. Vuelve a abrir la actividad desde Moodle.');
     ltiStates.delete(String(req.body.state));
-    const claims = await verifyLtiIdToken(req.body?.id_token, stateInfo.nonce);
+    const claims = await verifyLtiIdToken(req.body?.id_token, stateInfo.nonce, stateInfo.clientId);
 
     const context = claims['https://purl.imsglobal.org/spec/lti/claim/context'] || {};
     const resource = claims['https://purl.imsglobal.org/spec/lti/claim/resource_link'] || {};
