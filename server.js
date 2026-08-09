@@ -138,9 +138,7 @@ async function verifyLtiIdToken(idToken, expectedNonce) {
  const deployment = p['https://purl.imsglobal.org/spec/lti/claim/deployment_id'];
 
 if (LTI_DEPLOYMENT_ID && deployment !== LTI_DEPLOYMENT_ID) {
-  console.warn(
-    `⚠️ Deployment ID recibido desde Moodle: ${deployment} | configurado: ${LTI_DEPLOYMENT_ID}`
-  );
+  throw new Error('Deployment ID LTI inesperado');
 }
 
 return p;
